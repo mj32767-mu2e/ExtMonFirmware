@@ -1,0 +1,5 @@
+.Xil
+.ip_user_files
+*.dcp
+ip/ip
+ip/microblaze_mcs_0
