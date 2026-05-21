@@ -18,7 +18,7 @@ synth_ip [get_ips microblaze_mcs_0]
 synth_design -top top_amc502 -part xc7k420tffg1156-2
 write_checkpoint -force -noxdef top_amc502_synth.dcp
 
-add_files top_amc502.dcp
+add_files top_amc502_synth.dcp
 link_design -top top_amc502 -part xc7k420tffg1156-2
 opt_design
 place_design
