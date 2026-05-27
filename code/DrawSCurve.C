@@ -1,0 +1,36 @@
+void DrawSCurve() {
+  TFile *f=new TFile("junk.root");
+  f->cd("dthr_4/r333c0");
+  TCanvas *c1 = new TCanvas("c1",NULL,0,0,700,500);
+  c1->cd();
+  TH1F *h = gPad->DrawFrame(0,-0.05,300,1.05);
+  h->SetTitle("column 0 row 333");
+  h->GetXaxis()->SetTitle("Charge injection DAC value");
+  h->GetYaxis()->SetTitle("Efficiency");
+  tdac_8->SetMarkerStyle(20);
+  tdac_8->Draw("p");
+  tdac_4->SetMarkerStyle(24);
+  tdac_4->Draw("p");
+  tdac_12->SetMarkerStyle(25);
+  tdac_12->Draw("p");
+  TLine *l = new TLine(0,0.5,300,0.5);
+  l->SetLineStyle(2);
+  l->Draw();
+  TLegend *leg = new TLegend(0.5,0.55,0.80,0.80);
+  leg->AddEntry(tdac_12,"TDAC=12","p");
+  leg->AddEntry(tdac_8,"TDAC=8","p");
+  leg->AddEntry(tdac_4,"TDAC=4","p");
+  leg->SetFillStyle(0);
+  leg->Draw();
+  double x0,y0;
+  tdac_8->GetPoint(8,x0,y0);
+  double x1,y1;
+  tdac_8->GetPoint(9,x1,y1);
+  TLine *b = new TLine(x0,y0,x1,y1);
+  b->SetLineWidth(2);
+  b->SetLineColor(2);
+  b->Draw();
+  double v = x0+(x1-x0)/(y1-y0)*(0.5-y0);
+  TArrow *c = new TArrow(v,0.5,v,-0.05,0.02);
+  c->Draw();
+}
