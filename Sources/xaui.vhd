@@ -52,6 +52,7 @@ package xaui is
       iobus_ready : out std_logic;
       interrupt : out std_logic;
       reset_out : out std_logic;
+      ready_in : in std_logic;
       xgmii_rxclk : in std_logic;
       xgmii_txclk : in std_logic;
       xgmii_txd : out std_logic_vector(63 downto 0);

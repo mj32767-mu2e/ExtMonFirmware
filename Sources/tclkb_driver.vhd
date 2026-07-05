@@ -40,6 +40,8 @@ entity tclkb_driver is
   port (
     sysclk : in std_logic;
     bcoclk : in std_logic;
+    bcoclk_90 : in std_logic;
+    idle_pattern : in std_logic_vector(3 downto 0);
     d : in std_logic_vector(3 downto 0);
     dv : in std_logic;
     d16 : in std_logic_vector(15 downto 0);
@@ -68,6 +70,11 @@ architecture Behavioral of tclkb_driver is
   type state_t is ( idle, shifting, send, done );
   signal state : state_t := idle;
 
+  attribute mark_debug : string;
+  attribute dont_touch : string;
+  attribute mark_debug of r_frame : signal is "true";
+  attribute dont_touch of r_frame : signal is "true";
+
 begin
 
   oddr_imp : oddr
@@ -82,9 +89,9 @@ begin
     d2 => d_out(1)
   );
 
-  process ( sysclk ) begin
+  process ( sysclk, bcoclk_90 ) begin
     if ( sysclk'event and sysclk = '1' ) then
-      if ( bcoclk = '0' ) then
+      if ( bcoclk_90 = '0' ) then
         d_out <= r_frame(1 downto 0);
       else
         d_out <= r_frame(3 downto 2); 
@@ -132,7 +139,7 @@ begin
   end process;
 
   frame <= cmd when state = send else
-           shift(3 downto 0) when state = shifting else "0011";
+           shift(3 downto 0) when state = shifting else idle_pattern;
   ack16 <= busy;
 
 end Behavioral;

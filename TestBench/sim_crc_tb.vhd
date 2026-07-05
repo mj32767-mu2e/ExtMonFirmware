@@ -206,8 +206,6 @@ begin
                ", valid = " & std_logic'image(valid) &
                ", crc_rom = " & long_to_string(crc_rom) &
                ", valid_rom = " & std_logic'image(valid_rom) &
-               ", crc_table = " & long_to_string(crc_table) &
-               ", valid_table = " & std_logic'image(valid_table) &
                ", crc_slice = " & long_to_string(crc_slice) &
                ", valid_slice = " & std_logic'image(valid_slice);
       end if;

@@ -64,6 +64,15 @@ architecture Behavioral of tclka_counter is
   signal timer_expired : std_logic := '0';
   signal state : state_t := idle;
 
+  attribute mark_debug : string;
+  attribute dont_touch : string;
+  attribute mark_debug of enable : signal is "true";
+  attribute dont_touch of enable : signal is "true";
+  attribute mark_debug of counter_array : signal is "true";
+  attribute dont_touch of counter_array : signal is "true";
+  attribute mark_debug of rst : signal is "true";
+  attribute dont_touch of rst : signal is "true";
+
 begin
 
   g : for i in 0 to 15 generate
@@ -127,7 +136,8 @@ begin
       case state is
       when idle =>
         if ( strobe(13) = '1' ) then   -- process halt
-          mask <= "0010001000000000";
+          mask <= ( others => '1' );
+--          mask <= "0010001010000000";
         end if;
         if ( strobe(8) = '1' ) then   -- process run
           mask <= ( others => '1' );

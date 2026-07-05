@@ -30,6 +30,7 @@ entity xaui_xgmii is
   port (
     dclk : in std_logic;
     reset : in std_logic;
+    ready : out std_logic;
     clk156_in_p : in std_logic;
     clk156_in_n : in std_logic;
     xgmii_rxclk : out std_logic;
@@ -236,14 +237,18 @@ architecture RTL of xaui_xgmii is
   end component;
 
   signal rxchbond : std_logic_vector(4 downto 0);
-  signal count : std_logic_vector(7 downto 0);
-  signal soft_reset : std_logic := '0';
+  signal count : std_logic_vector(7 downto 0) := ( others => '1' );
   signal hard_reset : std_logic := '0';
+  signal soft_reset : std_logic := '0';
+  signal soft_reset_r : std_logic := '0';
+  signal soft_reset_s : std_logic := '0';
+  signal soft_reset_t : std_logic := '0';
   signal qpll_lock : std_logic;
   signal gtx_rx_reset_done : std_logic_vector(3 downto 0);
   signal gtx_tx_reset_done : std_logic_vector(3 downto 0);
   signal fsm_rx_reset_done : std_logic_vector(3 downto 0);
   signal fsm_tx_reset_done : std_logic_vector(3 downto 0);
+  signal tx_ready : std_logic;
   signal user_ready : std_logic := '0';
   signal rxusrclk : std_logic;
   signal rxusrclk2 : std_logic;
@@ -253,9 +258,8 @@ architecture RTL of xaui_xgmii is
   signal qpll_outclk : std_logic;
   signal qpll_refclk : std_logic;
   signal rx_reset_done : std_logic_vector(3 downto 0);
-  signal tx_reset_done : std_logic_vector(3 downto 0);
   type reset_state_t is ( Idle, Resetting, ResetDone, ResetWait, Done );
-  signal reset_state : reset_state_t := Idle;
+  signal reset_state : reset_state_t := Resetting;
   signal aligned : std_logic_vector(3 downto 0);
   signal chan_aligned : std_logic_vector(3 downto 0);
   signal pcs_rxd : std_logic_vector(63 downto 0);
@@ -279,8 +283,8 @@ architecture RTL of xaui_xgmii is
   signal pcs_rxc_pipe : pcs_c_t;
   type pcs_deskew_t is array(3 downto 0) of integer range 0 to 5;
   signal pcs_deskew : pcs_deskew_t;
-  signal nframe : integer range 0 to 31;
-  signal rframe : integer range 0 to 31;
+  signal nframe : integer range 0 to 31 := 0;
+  signal rframe : integer range 0 to 31 := 0;
   signal sendk : std_logic := '0';
   type txd_fifo_t is array(63 downto 0) of std_logic_vector(63 downto 0);
   type txc_fifo_t is array(63 downto 0) of std_logic_vector(7 downto 0);
@@ -295,34 +299,49 @@ architecture RTL of xaui_xgmii is
 
   attribute mark_debug : string;
   attribute dont_touch : string;
---  attribute mark_debug of reset_state : signal is "true";
+  attribute mark_debug of ros_code : signal is "true";
+  attribute dont_touch of ros_code : signal is "true";
+  attribute mark_debug of pcs_rxd_pipe : signal is "true";
+  attribute dont_touch of pcs_rxd_pipe : signal is "true";
+  attribute mark_debug of pcs_rxc_pipe : signal is "true";
+  attribute dont_touch of pcs_rxc_pipe : signal is "true";
+  attribute mark_debug of pcs_deskew : signal is "true";
+  attribute dont_touch of pcs_deskew : signal is "true";
+  attribute mark_debug of i : signal is "true";
+  attribute dont_touch of i : signal is "true";
+  attribute mark_debug of j : signal is "true";
+  attribute dont_touch of j : signal is "true";
+  attribute mark_debug of drop : signal is "true";
+  attribute dont_touch of drop : signal is "true";
+  attribute mark_debug of slush : signal is "true";
+  attribute dont_touch of slush : signal is "true";
+  attribute mark_debug of pcs_txd : signal is "true";
+  attribute dont_touch of pcs_txd : signal is "true";
+  attribute mark_debug of pcs_txc : signal is "true";
+  attribute dont_touch of pcs_txc : signal is "true";
+  attribute mark_debug of pcs_txd_state : signal is "true";
+  attribute dont_touch of pcs_txd_state : signal is "true";
+  attribute mark_debug of soft_reset : signal is "true";
+  attribute dont_touch of soft_reset : signal is "true";
+  attribute mark_debug of user_ready : signal is "true";
+  attribute dont_touch of user_ready : signal is "true";
+  attribute mark_debug of reset_state : signal is "true";
+  attribute dont_touch of reset_state : signal is "true";
+  attribute mark_debug of tx_ready : signal is "true";
+  attribute dont_touch of tx_ready : signal is "true";
+  attribute mark_debug of gtx_tx_reset_done : signal is "true";
+  attribute dont_touch of gtx_tx_reset_done : signal is "true";
+  attribute mark_debug of fsm_tx_reset_done : signal is "true";
+  attribute dont_touch of fsm_tx_reset_done : signal is "true";
+
 --  attribute mark_debug of pcs_rxd : signal is "true";
 --  attribute mark_debug of pcs_rxc : signal is "true";
---  attribute mark_debug of pcs_txd : signal is "true";
---  attribute mark_debug of pcs_txc : signal is "true";
 --  attribute mark_debug of soft_reset : signal is "true";
---  attribute mark_debug of hard_reset : signal is "true";
---  attribute mark_debug of user_ready : signal is "true";
 --  attribute mark_debug of aligned : signal is "true";
 --  attribute mark_debug of chan_aligned : signal is "true";
---  attribute mark_debug of ros_code : signal is "true";
---  attribute dont_touch of ros_code : signal is "true";
---  attribute mark_debug of pcs_rxd_pipe : signal is "true";
---  attribute dont_touch of pcs_rxd_pipe : signal is "true";
---  attribute mark_debug of pcs_rxc_pipe : signal is "true";
---  attribute dont_touch of pcs_rxc_pipe : signal is "true";
---  attribute mark_debug of pcs_deskew : signal is "true";
---  attribute dont_touch of pcs_deskew : signal is "true";
 --  attribute mark_debug of nframe : signal is "true";
 --  attribute mark_debug of rframe : signal is "true";
---  attribute mark_debug of pcs_txd_state : signal is "true";
 --  attribute mark_debug of rand_poly : signal is "true";
---  attribute mark_debug of drop : signal is "true";
---  attribute mark_debug of i : signal is "true";
---  attribute mark_debug of j : signal is "true";
---  attribute mark_debug of slush : signal is "true";
---  attribute mark_debug of i_r : signal is "true";
---  attribute mark_debug of j_r : signal is "true";
 
 begin
 
@@ -442,7 +461,7 @@ begin
       gt0_txoutclkfabric_out => open,
       gt0_txoutclkpcs_out => open,
       gt0_txcharisk_in => pcs_txc(2*i+1 downto 2*i),
-      gt0_txresetdone_out => open,
+      gt0_txresetdone_out => gtx_tx_reset_done(i),
       GT0_QPLLLOCK_IN => qpll_lock,
       GT0_QPLLREFCLKLOST_IN => qpll_refclklost,
       GT0_QPLLRESET_OUT => open,
@@ -468,38 +487,41 @@ begin
   xaui_tx_l3_p <= xaui_tx_p(3);
   xaui_tx_l3_n <= xaui_tx_n(3);
 
+  tx_ready <= '1' when gtx_tx_reset_done = "1111" and
+                       fsm_tx_reset_done = "1111" else '0';
+
   process ( dclk ) begin
     if ( dclk'event and dclk = '1' ) then
-      case reset_state is
-      when Idle =>
-        if ( reset = '1' ) then
-          hard_reset <= '1';
-          count <= x"40";
-          user_ready <= '0';
-          reset_state <= Resetting;
-        end if;
-      when Resetting =>
-        count <= std_logic_vector(unsigned(count)-1);
-        if ( count = x"00" ) then
-          reset_state <= ResetDone;
-          hard_reset <= '0';
-        end if;
-      when ResetDone =>
-        if ( qpll_lock = '1' ) then
-          reset_state <= ResetWait;
-        end if;
-      when ResetWait =>
-        if ( gtx_rx_reset_done = "1111" and gtx_tx_reset_done = "1111" ) then
-          reset_state <= Done;
-          user_ready <= '1';
-        end if;
-      when Done =>
-        if ( reset = '0' ) then
+      if ( reset = '1' ) then
+        reset_state <= Resetting;
+        count <= x"40";
+        user_ready <= '0';
+      else
+        case reset_state is
+        when Idle =>
           reset_state <= Idle;
-        end if;
-      end case;
+        when Resetting =>
+          count <= std_logic_vector(unsigned(count)-1);
+          if ( count = x"00" ) then
+            reset_state <= ResetDone;
+          end if;
+        when ResetDone =>
+          if ( qpll_lock = '1' ) then
+            reset_state <= ResetWait;
+          end if;
+        when ResetWait =>
+          if ( gtx_rx_reset_done = "1111" and gtx_tx_reset_done = "1111" ) then
+            reset_state <= Done;
+            user_ready <= '1';
+          end if;
+        when Done =>
+          reset_state <= Idle;
+        end case;
+      end if;
     end if;
   end process;
+  soft_reset <= '1' when reset_state = Resetting else '0';
+  ready <= tx_ready;
 
   process ( rxusrclk2 )
     variable deskew : boolean := false;
@@ -523,22 +545,23 @@ begin
       pcs_rxc_pipe(3)(5 downto 0) <= pcs_rxc_pipe(3)(7 downto 2);
       pcs_rxc_pipe(3)(7 downto 6) <= pcs_rxc(7 downto 6);
 
-      pcs_deskew(0) <= 3;
       if ( pcs_rxc_pipe(0)(2) = '1' and
            pcs_rxd_pipe(0)(23 downto 16) = x"7c" ) then
+        pcs_deskew(0) <= 2;
         for j in 1 to 3 loop
           for k in 0 to 4 loop
             if ( pcs_rxc_pipe(j)(k) = '1' and
                  pcs_rxd_pipe(j)(8*k+7 downto 8*k) = x"7c" ) then
-              pcs_deskew(j) <= 1+k;
+              pcs_deskew(j) <= k;
             end if;
           end loop;
         end loop;
       end if;
       if ( pcs_rxc_pipe(0)(3) = '1' and
            pcs_rxd_pipe(0)(31 downto 24) = x"7c" ) then
+        pcs_deskew(0) <= 3;
         for j in 1 to 3 loop
-          for k in 0 to 5 loop
+          for k in 1 to 5 loop
             if ( pcs_rxc_pipe(j)(k) = '1' and
                  pcs_rxd_pipe(j)(8*k+7 downto 8*k) = x"7c" ) then
               pcs_deskew(j) <= k;
@@ -557,43 +580,59 @@ begin
     end if;
   end process;
 
-  process ( rxusrclk2, i, j, slush ) 
+--
+--  This process fills the input fifo.  Write pointer is i, read pointer is j.
+--  
+--  
+--
+
+  process ( rxusrclk2, i, j, slush, soft_reset ) 
     variable splat : integer;
   begin
     if ( rxusrclk2'event and rxusrclk2 = '1' ) then
-      j_r <= j;
-      i_r <= i;
-      splat := i_r - j_r;
+      soft_reset_r <= soft_reset;
+      if ( soft_reset_r = '1' ) then
+        i <= 0;
+      else
+        j_r <= j;
+        i_r <= i;
+        splat := i_r - j_r;
 --
 --  These can wrap around so that when i=0 and j=63
 --  we would like splat to be 1.
 --
 --  If j > i then we definitely don't want to drop anything.
 --
-      if ( splat < -32 ) then
-        splat := 64 + splat;
-      end if;
-      slush <= splat;
-      if ( slush < 32 or xgmii_txc /= x"ff" or xgmii_txd /= x"0707070707070707" ) then
-        txd_fifo(i) <= xgmii_txd;
-        txc_fifo(i) <= xgmii_txc;
-        i <= i + 1;
-        drop <= '0';
-      else -- slush >= 32 and txc = ff and txd == 07070707...
-        drop <= '1';
+        if ( splat < -32 ) then
+          splat := 64 + splat;
+        end if;
+        slush <= splat;
+        if ( slush < 32 or xgmii_txc /= x"ff" or xgmii_txd /= x"0707070707070707" ) then
+          txd_fifo(i) <= xgmii_txd;
+          txc_fifo(i) <= xgmii_txc;
+          i <= i + 1;
+          drop <= '0';
+        else -- slush >= 32 and txc = ff and txd == 07070707...
+          drop <= '1';
+        end if;
       end if;
     end if;
   end process;
 
   process ( txusrclk2, i, j ) begin
     if ( txusrclk2'event and txusrclk2 = '1' ) then
-      if ( i /= j ) then
-        xgmii_txd_r <= txd_fifo(j);
-        xgmii_txc_r <= txc_fifo(j);
-        j <= j + 1;
+      soft_reset_s <= soft_reset;
+      if ( soft_reset_s = '1' ) then
+        j <= 0;
       else
-        xgmii_txd_r <= x"0707070707070707";
-        xgmii_txc_r <= x"ff";
+        if ( i /= j ) then
+          xgmii_txd_r <= txd_fifo(j);
+          xgmii_txc_r <= txc_fifo(j);
+          j <= j + 1;
+        else
+          xgmii_txd_r <= x"0707070707070707";
+          xgmii_txc_r <= x"ff";
+        end if;
       end if;
     end if;
   end process;
@@ -601,143 +640,153 @@ begin
   process ( txusrclk2, nframe, rframe, pcs_txd_state )
     variable txd : std_logic_vector(7 downto 0);
     variable pcs : std_logic_vector(63 downto 0);
-    variable n : integer range 0 to 31 := nframe;
-    variable r : integer range 0 to 31 := rframe;
-    variable state : pcs_state_t := pcs_txd_state;
+    variable n : integer range 0 to 31;
+    variable r : integer range 0 to 31;
+    variable state : pcs_state_t;
     variable lsb : std_logic;
     variable ext : std_logic_vector(7 downto 0);
     constant poly : std_logic_vector(7 downto 0) := "11000000";
     variable rand : std_logic_vector(7 downto 0);
   begin
+    state := pcs_txd_state;
+    n := nframe;
+    r := rframe;
     if ( txusrclk2'event and txusrclk2 = '1' ) then
---      xgmii_txd_r <= xgmii_txd;
---      xgmii_txc_r <= xgmii_txc;
-
-      rand := rand_poly;
-      for i in 0 to 7 loop
-
-        if ( i = 0 or i = 4 ) then
-          lsb := rand(0);
-          for j in 0 to 7 loop
-            ext(j) := lsb;
-          end loop;
-          rand := ( '0' & rand(7 downto 1) ) xor ( ext and poly );
-        end if;
-
-        txd := xgmii_txd_r(8*i+7 downto 8*i);
-        if ( xgmii_txc_r(i) = '0' ) then
-          pcs(8*i+7 downto 8*i) := txd;   -- Send data
-        elsif ( txd = x"fb" ) then
-          pcs(8*i+7 downto 8*i) := txd;   -- Send start (should be in column 0)
-          state := Frame;
-        elsif ( txd = x"fd" ) then
-          pcs(8*i+7 downto 8*i) := txd;   -- Send terminate
-          state := TermFill;
-        elsif ( state = TermFill ) then   -- Pad the terminate
-          pcs(8*i+7 downto 8*i) := x"bc";
-        elsif ( txd = x"07" and state = SendSync ) then
-          pcs(8*i+7 downto 8*i) := x"bc";   -- Sync = ||K||
-        elsif ( txd = x"07" and state = TermSync ) then
-          pcs(8*i+7 downto 8*i) := x"bc";   -- Sync = ||K||
-        elsif ( txd = x"07" and state = SendAlign ) then
-          pcs(8*i+7 downto 8*i) := x"7c";   -- Align = ||A||
-        elsif ( txd = x"07" and state = TermAlign ) then
-          pcs(8*i+7 downto 8*i) := x"7c";   -- Align = ||A||
-        elsif ( txd = x"07" and state = SendSkip ) then
-          pcs(8*i+7 downto 8*i) := x"1c";   -- Skip = ||R||
-        else
-          pcs(8*i+7 downto 8*i) := txd;   -- Should not happen
-        end if;
-
-        if ( i = 3 or i = 7 ) then
-          case state is
-          when TermFill =>
-            if ( sendk = '1' ) then
-              sendk <= '0';
-              state := TermSync;
-            elsif ( n < r ) then
-              sendk <= '0';
-              state := TermSync;
-            else
-              sendk <= '1';
-              state := TermAlign;
-              r := to_integer(unsigned('1' & rand(3 downto 0)));
-              n := 0;
-            end if;
-          when TermAlign =>
-            n := n + 1;
-            state := SendSkip;
-          when TermSync =>
-            n := n + 1;
-            state := SendSkip;
-          when SendSync =>
-            n := n + 1;
-            if ( n >= r ) then
-              state := SendAlign;
-              r := to_integer(unsigned('1' & rand(3 downto 0)));
-              n := 0;
-            elsif ( lsb = '1' ) then
-              state := SendSync;
-            else
-              state := SendSkip;
-            end if;
-          when SendAlign =>
-            n := n + 1;
-            if ( lsb = '1' ) then
-              state := SendSync;
-            else
-              state := SendSkip;
-            end if;
-          when SendSkip =>
-            n := n + 1;
-            if ( n >= r ) then
-              state := SendAlign;
-              r := to_integer(unsigned('1' & rand(3 downto 0)));
-              n := 0;
-            elsif ( lsb = '1' ) then
-              state := SendSync;
-            else
-              state := SendSkip;
-            end if;
-          when Frame =>
-            if ( n < r ) then
+      soft_reset_t <= soft_reset;
+      if ( soft_reset_t = '1' ) then
+        rand_poly <= "00000001";
+        pcs_txd_state <= SendAlign;
+        nframe <= 0;
+        rframe <= 0;
+      else
+        rand := rand_poly;
+        for i in 0 to 7 loop
+  
+          if ( i = 0 or i = 4 ) then
+            lsb := rand(0);
+            for j in 0 to 7 loop
+              ext(j) := lsb;
+            end loop;
+            rand := ( '0' & rand(7 downto 1) ) xor ( ext and poly );
+          end if;
+  
+          txd := xgmii_txd_r(8*i+7 downto 8*i);
+          if ( xgmii_txc_r(i) = '0' ) then
+            pcs(8*i+7 downto 8*i) := txd;   -- Send data
+          elsif ( txd = x"fb" ) then
+            pcs(8*i+7 downto 8*i) := txd;   -- Send start (should be in column 0)
+            state := Frame;
+          elsif ( txd = x"fd" ) then
+            pcs(8*i+7 downto 8*i) := txd;   -- Send terminate
+            state := TermFill;
+          elsif ( state = TermFill ) then   -- Pad the terminate
+            pcs(8*i+7 downto 8*i) := x"bc";
+          elsif ( txd = x"07" and state = SendSync ) then
+            pcs(8*i+7 downto 8*i) := x"bc";   -- Sync = ||K||
+          elsif ( txd = x"07" and state = TermSync ) then
+            pcs(8*i+7 downto 8*i) := x"bc";   -- Sync = ||K||
+          elsif ( txd = x"07" and state = SendAlign ) then
+            pcs(8*i+7 downto 8*i) := x"7c";   -- Align = ||A||
+          elsif ( txd = x"07" and state = TermAlign ) then
+            pcs(8*i+7 downto 8*i) := x"7c";   -- Align = ||A||
+          elsif ( txd = x"07" and state = SendSkip ) then
+            pcs(8*i+7 downto 8*i) := x"1c";   -- Skip = ||R||
+          else
+            pcs(8*i+7 downto 8*i) := txd;   -- Should not happen
+          end if;
+  
+          if ( i = 3 or i = 7 ) then
+            case state is
+            when TermFill =>
+              if ( sendk = '1' ) then
+                sendk <= '0';
+                state := TermSync;
+              elsif ( n < r ) then
+                sendk <= '0';
+                state := TermSync;
+              else
+                sendk <= '1';
+                state := TermAlign;
+                r := to_integer(unsigned('1' & rand(3 downto 0)));
+                n := 0;
+              end if;
+            when TermAlign =>
               n := n + 1;
-            end if;
-          end case;
-        end if;
-      end loop;
-      nframe <= n;
-      rframe <= r;
-      rand_poly <= rand;
-      pcs_txd_state <= state;
-
-      pcs_txc(0) <= xgmii_txc_r(0);
-      pcs_txc(2) <= xgmii_txc_r(1);
-      pcs_txc(4) <= xgmii_txc_r(2);
-      pcs_txc(6) <= xgmii_txc_r(3);
-      pcs_txc(1) <= xgmii_txc_r(4);
-      pcs_txc(3) <= xgmii_txc_r(5);
-      pcs_txc(5) <= xgmii_txc_r(6);
-      pcs_txc(7) <= xgmii_txc_r(7);
-      pcs_txd(7 downto 0) <= pcs(7 downto 0);
-      pcs_txd(23 downto 16) <= pcs(15 downto 8);
-      pcs_txd(39 downto 32) <= pcs(23 downto 16);
-      pcs_txd(55 downto 48) <= pcs(31 downto 24);
-      pcs_txd(15 downto 8) <= pcs(39 downto 32);
-      pcs_txd(31 downto 24) <= pcs(47 downto 40);
-      pcs_txd(47 downto 40) <= pcs(55 downto 48);
-      pcs_txd(63 downto 56) <= pcs(63 downto 56);
+              state := SendSkip;
+            when TermSync =>
+              n := n + 1;
+              state := SendSkip;
+            when SendSync =>
+              n := n + 1;
+              if ( n >= r ) then
+                state := SendAlign;
+                r := to_integer(unsigned('1' & rand(3 downto 0)));
+                n := 0;
+              elsif ( lsb = '1' ) then
+                state := SendSync;
+              else
+                state := SendSkip;
+              end if;
+            when SendAlign =>
+              n := n + 1;
+              if ( lsb = '1' ) then
+                state := SendSync;
+              else
+                state := SendSkip;
+              end if;
+            when SendSkip =>
+              n := n + 1;
+              if ( n >= r ) then
+                state := SendAlign;
+                r := to_integer(unsigned('1' & rand(3 downto 0)));
+                n := 0;
+              elsif ( lsb = '1' ) then
+                state := SendSync;
+              else
+                state := SendSkip;
+              end if;
+            when Frame =>
+              if ( n < r ) then
+                n := n + 1;
+              end if;
+            end case;
+          end if;
+        end loop;
+        nframe <= n;
+        rframe <= r;
+        rand_poly <= rand;
+        pcs_txd_state <= state;
+  
+        pcs_txc(0) <= xgmii_txc_r(0);
+        pcs_txc(2) <= xgmii_txc_r(1);
+        pcs_txc(4) <= xgmii_txc_r(2);
+        pcs_txc(6) <= xgmii_txc_r(3);
+        pcs_txc(1) <= xgmii_txc_r(4);
+        pcs_txc(3) <= xgmii_txc_r(5);
+        pcs_txc(5) <= xgmii_txc_r(6);
+        pcs_txc(7) <= xgmii_txc_r(7);
+        pcs_txd(7 downto 0) <= pcs(7 downto 0);
+        pcs_txd(23 downto 16) <= pcs(15 downto 8);
+        pcs_txd(39 downto 32) <= pcs(23 downto 16);
+        pcs_txd(55 downto 48) <= pcs(31 downto 24);
+        pcs_txd(15 downto 8) <= pcs(39 downto 32);
+        pcs_txd(31 downto 24) <= pcs(47 downto 40);
+        pcs_txd(47 downto 40) <= pcs(55 downto 48);
+        pcs_txd(63 downto 56) <= pcs(63 downto 56);
+      end if;
     end if;
   end process;
 
   ros_code(0) <=
     '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"1c" else '0';
   ros_code(1) <=
-    '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"7c" else '0';
+    '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"7c" else
+    '1' when pcs_rxc(1) = '1' and pcs_rxd(15 downto 8) = x"7c" else '0';
   ros_code(2) <=
     '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"bc" else '0';
   ros_code(3) <=
-    '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"fb" else '0';
+    '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"fb" else
+    '1' when pcs_rxc(1) = '1' and pcs_rxd(15 downto 8) = x"fb" else '0';
   ros_code(4) <=
     '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"fd" else 
     '1' when pcs_rxc(1) = '1' and pcs_rxd(15 downto 8) = x"fd" else 
@@ -754,6 +803,6 @@ begin
   ros_code(7) <=
     '1' when pcs_rxc(0) = '1' and pcs_rxd(7 downto 0) = x"5c" else '0';
   debug <= ( others => '0' );
-  status_vector <= ( others => '0' );
+  status_vector <= ros_code;
 
 end RTL;

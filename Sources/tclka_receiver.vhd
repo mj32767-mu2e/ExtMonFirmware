@@ -46,7 +46,7 @@ end tclka_receiver;
 architecture Behavioral of tclka_receiver is
 
   signal bits : std_logic_vector(1 downto 0);
-  signal morebits : std_logic_vector(1 downto 0);
+  signal morebits : std_logic_vector(3 downto 0);
 --  signal cycle : std_logic;
   signal r_strobe : std_logic_vector(15 downto 0);
   signal cmd : std_logic_vector(3 downto 0);
@@ -58,6 +58,10 @@ architecture Behavioral of tclka_receiver is
   signal tclka : std_logic;
   signal latch_buffer : std_logic_vector(15 downto 0);
 
+  attribute mark_debug : string;
+  attribute dont_touch : string;
+  attribute mark_debug of latch_buffer : signal is "true";
+  attribute dont_touch of latch_buffer : signal is "true";
 begin
 
   idly_imp : idelaye2
@@ -138,15 +142,12 @@ begin
     end if;
   end process;
  
-  process ( sysclk ) begin
-    if ( sysclk'event and sysclk = '0' ) then
---      cycle <= bcoclk;   -- Safe to sample bcoclk on falling edge of sysclk
---      if ( cycle = '0' ) then  -- bcoclk = 0
+  process ( sysclk, bcoclk ) begin
+    if ( sysclk'event and sysclk = '1' ) then
+      morebits <= morebits(1 downto 0) & bits;
       if ( bcoclk = '1' ) then
-        morebits <= bits;
-      else                     -- bcoclk = 1
-        latch_buffer <= latch_buffer(11 downto 0) & morebits & bits;
-        case latch_buffer(11 downto 8) is
+        latch_buffer <= latch_buffer(11 downto 0) & morebits;
+        case latch_buffer(11 downto 8) is  -- This seems to get the phase right
         when "0000" =>
           r_strobe <= "0000000000000001";
         when "0001" =>

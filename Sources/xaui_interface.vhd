@@ -44,6 +44,7 @@ generic (
     iobus_ready : out std_logic;
     interrupt : out std_logic;
     reset_out : out std_logic;
+    ready_in : in std_logic;
     xgmii_rxclk : in std_logic;
     xgmii_txclk : in std_logic;
     xgmii_txd : out std_logic_vector(63 downto 0);
@@ -535,7 +536,7 @@ architecture RTL of xaui_interface is
   signal txd_pipe : std_logic_vector(2*64-1 downto 0);
   signal txc_pipe : std_logic_vector(2*8-1 downto 0);
   signal xaui_reset : std_logic := '0';
-  signal hard_reset : std_logic := '0';
+  signal soft_reset : std_logic := '0';
 
   signal frame : std_logic := '0';
   signal frame_start : std_logic := '0';
@@ -550,8 +551,8 @@ architecture RTL of xaui_interface is
   signal ethernet_dout : std_logic_vector(63 downto 0);
   signal next_txd : std_logic_vector(63 downto 0);
   signal next_txc : std_logic_vector(7 downto 0);
-  signal txd : std_logic_vector(63 downto 0);
-  signal txc : std_logic_vector(7 downto 0);
+  signal txd : std_logic_vector(63 downto 0) := x"0707070707070707";
+  signal txc : std_logic_vector(7 downto 0) := x"ff";
   signal arpreq_fcs : std_logic;
   signal arprep_fcs : std_logic;
   signal send_fcs : std_logic;
@@ -714,6 +715,8 @@ architecture RTL of xaui_interface is
   attribute dont_touch of rxd : signal is "true";
   attribute mark_debug of rxc : signal is "true";
   attribute dont_touch of rxc : signal is "true";
+  attribute mark_debug of grant : signal is "true";
+  attribute dont_touch of grant : signal is "true";
 
 --  attribute mark_debug of frame_start : signal is "true";
 --  attribute mark_debug of frame_end : signal is "true";
@@ -1170,14 +1173,14 @@ begin
         sendpkt_armed <= '0';
         sendpkt_now <= '0';
       end if;
-      hard_reset <= '0';
+      soft_reset <= '0';
       if ( iobus.io_addr_strobe = '1' and masked_address = base_address ) then
         iobus_ready <= '1';
         if ( iobus.io_write_strobe = '1' ) then
           case iobus.io_address(15 downto 0) is
             when address_xaui_csr =>
               xaui_csr <= iobus.io_write_data;
-              hard_reset <= iobus.io_write_data(31);
+              soft_reset <= iobus.io_write_data(31);
               if ( xaui_int = '1' and iobus.io_write_data(24) = '1' ) then
                 xaui_int_ack <= '1';
               end if;
@@ -1228,7 +1231,7 @@ begin
         if ( iobus.io_read_strobe = '1' ) then
           case iobus.io_address(15 downto 0) is
             when address_xaui_csr =>
-              latched_data <= xaui_csr(31 downto 25) & xaui_int &
+              latched_data <= not ready_in & xaui_csr(30 downto 25) & xaui_int &
                               xgmii_clk_lock & xaui_csr(22) & debug_in &
                               status_vector_in & xaui_csr(7 downto 0);
             when address_mac_addr_low =>
@@ -1468,9 +1471,8 @@ begin
       else
         for i in 0 to 7 loop
           if ( new_txc(i) = '1' and crc_en = '1' ) then
-            new_txc(i+3 downto i) := "0000";
+            new_txc(i+4 downto i) := "10000";
             new_txd(8*i+39 downto 8*i) := x"fd" & crc;
-            new_txc(15 downto i+4) := ( others => '1' );
             for j in i+5 to 15 loop
               new_txd(8*j+7 downto 8*j) := x"07";
               new_txc(j) := '1';
@@ -1512,7 +1514,7 @@ begin
   end process;
 
   xaui_reset <= xaui_csr(30);
-  reset_out <= hard_reset;
+  reset_out <= soft_reset;
 
 --
 --  This process generates arptab_read_strobe as the logical or of all the

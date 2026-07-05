@@ -103,6 +103,8 @@ add_files top_amc502_xaui_synth.dcp
 all_clocks -verbose
 report_clock_networks -file top_amc502_xaui_clocks.log
 report_clock_interaction -append -file top_amc502_xaui_clocks.log
+report_cdc -summary -append -file top_amc502_xaui_clocks.log
+report_methodology -file top_amc502_xaui_methodology.log -cells [get_cells {xaui_imp/*}]
 
 link_design -top top_amc502_xaui -part xc7k420tffg1156-2
 
@@ -119,13 +121,14 @@ set_property port_width 1 [get_debug_ports u_ila_0/clk]
 connect_debug_port u_ila_0/clk [get_nets xaui_core/xgmii_rxclk]
 
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe0]
-set_property port_width [expr 1+8+64+32+1] [get_debug_ports u_ila_0/probe0]
+set_property port_width [expr 1+8+64+32+1+8] [get_debug_ports u_ila_0/probe0]
 
 connect_debug_port u_ila_0/probe0 [get_nets [list xaui_imp/frame]]
 connect_debug_port u_ila_0/probe0 [lsort -dictionary [get_nets [list {xaui_imp/rxc[*]}]]]
 connect_debug_port u_ila_0/probe0 [lsort -dictionary [get_nets [list {xaui_imp/rxd[*]}]]]
 connect_debug_port u_ila_0/probe0 [lsort -dictionary [get_nets [list {xaui_imp/eth_imp/crc[*]}]]]
 connect_debug_port u_ila_0/probe0 [lsort -dictionary [get_nets [list xaui_imp/eth_imp/valid]]]
+connect_debug_port u_ila_0/probe0 [lsort -dictionary [get_nets [list {xaui_core/ros_code[*]}]]]
 
 report_property [get_nets [list xaui_imp/frame]]
 report_property [lindex [get_nets [list {xaui_imp/rxd[*]}]] 0]
@@ -138,8 +141,9 @@ set_property C_USER_SCAN_CHAIN 1 [get_debug_cores dbg_hub]
 connect_debug_port dbg_hub/clk [get_nets xgmii_rxclk]
 
 opt_design -debug_log
-report_clock_networks -file top_amc502_xaui_clocks.log
+report_clock_networks -append -file top_amc502_xaui_clocks.log
 report_clock_interaction -append -file top_amc502_xaui_clocks.log
+report_cdc -summary -append -file top_amc502_xaui_clocks.log
 
 implement_debug_core [get_debug_cores u_ila_0]
 write_debug_probes -force top_amc502_xaui.ltx

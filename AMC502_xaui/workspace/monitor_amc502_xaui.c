@@ -380,7 +380,8 @@ int cmd_dump(int argc,const char **argv) {
 int cmd_freq(int argc,const char **argv) {
   static char *clkname[] = { "   bcoclk", "   sysclk", "  bcoclk*", "  sysclk*",
                              "   fpclkb", "     tdaq", "clk100mhz", "  gmiiclk",
-                             "156.25mhz", "   fpclke", "   fpclkg", NULL };
+                             "156.25mhz", "   fpclke", "   fpclkg", "   fpclkc",
+                             "   fpclkd", NULL };
   int i;
 
   for ( i=0; clkname[i] != NULL; i++ ) {
@@ -741,9 +742,9 @@ int setup_everything(int mask,int master) {
     while ( (AMC502_I2C&0x80000000) );
 
     if ( master ) {
-      AMC502_I2C_WBUF[0] = 0x00008b00;
-      AMC502_I2C_WBUF[1] = 0x00808880;
-      AMC502_I2C_WBUF[2] = 0x00808040;
+      AMC502_I2C_WBUF[0] = 0x0000cb00;
+      AMC502_I2C_WBUF[1] = 0x88888880;
+      AMC502_I2C_WBUF[2] = 0x40808040;
       AMC502_I2C_WBUF[3] = 0x00004088;
     }
     else {

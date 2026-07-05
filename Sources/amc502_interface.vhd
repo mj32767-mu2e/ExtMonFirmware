@@ -17,6 +17,25 @@
 -- Revision 0.01 - File Created
 -- Additional Comments: 
 --
+-- Configuration of MUX0 is as follows:
+--
+--   Port 00 (TCLKA) : input Z=100 Ohm <-- (tclka)
+--   Port 01 (TCLKB) : output <-- 11 (FPCLKH)
+--   Port 02 (TCLKC) : input
+--   Port 03 (TCLKD) : input
+--   Port 04 (PLLCLKA_in) : output <-- 0 (TCLKA)
+--   Port 05 (PLLCLKB_in) : output <-- 8 (FPCLKE)
+--   Port 06 (PLLCLKC_in) : output <-- 8 (FPCLKE)
+--   Port 07 (PLLCLKD_in) : output <-- 8 (FPCLKE)
+--   Port 08 (FPCLKE) : input Z=100 Ohm <-- (clk10mhz)
+--   Port 09 (FPCLKF) : output <-- 0 (TCLKA)
+--   Port 10 (FPCLKG) : output <-- 0 (TCLKA)
+--   Port 11 (FPCLKH) : input Z=100 Ohm <-- (tclkb)
+--   Port 12 (FMCEXPA) : output <-- 8 (FPCLKE)
+--   Port 13 (FMCEXPB) : input Z=100 Ohm
+--   Port 14 (FMCEXPC) : unused
+--   Port 15 (FMCEXPD) : unused
+--
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -95,9 +114,10 @@ architecture RTL of amc502_interface is
       sda_t : out std_logic;
       strobe : in std_logic;
       ready : out std_logic;
-      len : in std_logic_vector(7 downto 0);
-      address : in std_logic_vector(6 downto 0);
-      rw : in std_logic;
+      nwrite : in std_logic_vector(7 downto 0);
+      nread : in std_logic_vector(7 downto 0);
+      address : in std_logic_vector(7 downto 0);
+      daddr : out std_logic_vector(7 downto 0);
       din : in std_logic_vector(7 downto 0);
       den : out std_logic;
       dout : out std_logic_vector(7 downto 0);
@@ -136,6 +156,8 @@ architecture RTL of amc502_interface is
   port (
     sysclk : in std_logic;
     bcoclk : in std_logic;
+    bcoclk_90 : in std_logic;
+    idle_pattern : in std_logic_vector(3 downto 0);
     d : in std_logic_vector(3 downto 0);
     dv : in std_logic;
     d16 : in std_logic_vector(15 downto 0);
@@ -259,6 +281,8 @@ architecture RTL of amc502_interface is
   constant address_freq_9 : std_logic_vector(15 downto 0) := x"00a4";
   constant address_freq_10 : std_logic_vector(15 downto 0) := x"00a8";
   constant address_freq_11 : std_logic_vector(15 downto 0) := x"00ac";
+  constant address_freq_12 : std_logic_vector(15 downto 0) := x"00b0";
+  constant address_freq_13 : std_logic_vector(15 downto 0) := x"00b4";
   constant address_clk156_25mhz_freq : std_logic_vector(15 downto 0) := x"0080";
 
   constant address_i2c_wbuf : std_logic_vector(15 downto 0) := x"0100";
@@ -307,24 +331,22 @@ architecture RTL of amc502_interface is
   signal i2c_ready : std_logic;
   signal i2c_ready_r : std_logic;
   signal i2c_busy : std_logic;
-  signal i2c_address : std_logic_vector(6 downto 0);
+  signal i2c_address : std_logic_vector(7 downto 0);
   signal i2c_rw : std_logic;
-  signal i2c_len : std_logic_vector(7 downto 0);
+  signal i2c_nread : std_logic_vector(7 downto 0);
+  signal i2c_nwrite : std_logic_vector(7 downto 0);
   signal i2c_dout : std_logic_vector(7 downto 0);
-  signal i2c_dout_r : std_logic_vector(7 downto 0);
   signal i2c_den : std_logic;
   signal i2c_din : std_logic_vector(7 downto 0);
+  signal i2c_daddr : std_logic_vector(7 downto 0);
   signal i2c_wen : std_logic;
   signal i2c_wen_r : std_logic;
   signal i2c_nack : std_logic;
   signal i2c_nbyte : std_logic_vector(7 downto 0);
-  signal i2c_next_addr : std_logic;
   signal i2c_addr_lllx : std_logic_vector(31 downto 0);
   signal i2c_data_lllx : std_logic_vector(31 downto 0);
 
   type i2c_buffer_t is array(63 downto 0) of std_logic_vector(31 downto 0);
-  signal i2c_addr : integer range 0 to 255;
-  signal i2c_addr_r : integer range 0 to 255;
   signal i2c_wbuf : i2c_buffer_t;
   signal i2c_rbuf : i2c_buffer_t;
   signal i2c_wbuf_we : std_logic;
@@ -333,7 +355,7 @@ architecture RTL of amc502_interface is
   signal i2c_rbuf_data : std_logic_vector(31 downto 0);
   signal i2c_buf_data : std_logic_vector(31 downto 0);
 
-  type freq_array_t is array(11 downto 0) of std_logic_vector(31 downto 0);
+  type freq_array_t is array(13 downto 0) of std_logic_vector(31 downto 0);
   signal freq : freq_array_t;
   signal fpclk_internal : std_logic_vector(5+nclock downto 0);
 
@@ -368,9 +390,13 @@ architecture RTL of amc502_interface is
   signal mmcm_drdy : std_logic;
   signal mmcm_data_word : std_logic_vector(31 downto 0);
   signal one_pulse_per_second : std_logic := '0';
-  signal master_sysclk : std_logic;
-  signal master_sysclk90 : std_logic;
-  signal master_bcoclk : std_logic;
+  signal clk80mhz_out : std_logic;
+  signal clk80mhz : std_logic;
+  signal clk40mhz_out : std_logic;
+  signal clk40mhz : std_logic;
+  signal clk40mhz_90 : std_logic;
+  signal clk40mhz_90_out : std_logic;
+  constant tclk_idle : std_logic_vector(3 downto 0) := x"3";
   signal slave_sysclk2 : std_logic;
   signal slave_sysclk : std_logic;
   signal slave_bcoclk : std_logic;
@@ -379,9 +405,6 @@ architecture RTL of amc502_interface is
   signal master_fb_bufg : std_logic;
   signal slave_fb : std_logic;
   signal slave_fb_bufg : std_logic;
-  signal master_clkout0 : std_logic;
-  signal master_clkout1 : std_logic;
-  signal master_clkout2 : std_logic;
   signal slave_clkout0 : std_logic;
   signal slave_clkout0_90 : std_logic;
   signal slave_clkout1 : std_logic;
@@ -408,8 +431,20 @@ architecture RTL of amc502_interface is
   signal event_generator_debug : std_logic_vector(7 downto 0);
 
   attribute mark_debug : string;
---  attribute mark_debug of timer_expired : signal is "true";
+  attribute dont_touch : string;
+  attribute mark_debug of tclka_strobe : signal is "true";
+  attribute dont_touch of tclka_strobe : signal is "true";
+  attribute mark_debug of tclk_data : signal is "true";
+  attribute dont_touch of tclk_data : signal is "true";
+  attribute mark_debug of tclk_data_valid : signal is "true";
+  attribute dont_touch of tclk_data_valid : signal is "true";
 
+  attribute mark_debug of i2c_strobe : signal is "true";
+  attribute dont_touch of i2c_strobe : signal is "true";
+  attribute mark_debug of i2c_den : signal is "true";
+  attribute dont_touch of i2c_den : signal is "true";
+  attribute mark_debug of i2c_wen : signal is "true";
+  attribute dont_touch of i2c_wen : signal is "true";
 begin
 
   i2c_l1_imp : i2c
@@ -421,9 +456,10 @@ begin
     sda_t => sda_l1_t,
     strobe => i2c_strobe,
     ready => i2c_ready,
-    len => i2c_len,
+    nwrite => i2c_nwrite,
+    nread => i2c_nread,
     address => i2c_address,
-    rw => i2c_rw,
+    daddr => i2c_daddr,
     din => i2c_din,
     den => i2c_den,
     dout => i2c_dout,
@@ -432,29 +468,33 @@ begin
     nbyte => i2c_nbyte
   );
 
---  i2c_lllx_imp : i2c_slave
---  port map (
---    clk => busclk,
---    scl => scl_lllx,
---    sda_in => sda_lllx_in,
---    sda_out => sda_lllx_out,
---    sda_t => sda_lllx_t,
---    address => i2c_addr_lllx,
---    write_data => i2c_data_lllx,
---    read_data => io_read_data,
---    address_strobe => io_address_strobe,
---    read_strobe => io_read_strobe,
---    write_strobe => io_write_strobe 
---  );
---  io_address <= i2c_addr_lllx;
---  io_write_data <= i2c_data_lllx;
+  i2c_lllx_imp : i2c_slave
+  port map (
+    clk => busclk,
+    scl => scl_lllx,
+    sda_in => sda_lllx_in,
+    sda_out => sda_lllx_out,
+    sda_t => sda_lllx_t,
+    address => i2c_addr_lllx,
+    write_data => i2c_data_lllx,
+    read_data => io_read_data,
+    address_strobe => io_address_strobe,
+    read_strobe => io_read_strobe,
+    write_strobe => io_write_strobe 
+  );
+  io_address <= i2c_addr_lllx;
+  io_write_data <= i2c_data_lllx;
 
   primary_clock_imp : mmcme2_adv
   generic map (
-    clkfbout_mult_f => 5.000,
+    clkfbout_mult_f => 6.000,
     clkin1_period => 5.000,
     clkin2_period => 5.000,
-    clkout0_divide_f => 100.000
+    clkout0_divide_f => 120.000,
+    clkout1_divide => 15,
+    clkout2_divide => 30,
+    clkout3_divide => 30,
+    clkout3_phase => 90.000
   )
   port map (
     clkfbin => clkfb_bufg,
@@ -480,11 +520,11 @@ begin
     clkfboutb => open,
     clkout0 => clk10mhz_out,
     clkout0b => open,
-    clkout1 => open,
+    clkout1 => clk80mhz_out,
     clkout1b => open,
-    clkout2 => open,
+    clkout2 => clk40mhz_out,
     clkout2b => open,
-    clkout3 => open,
+    clkout3 => clk40mhz_90_out,
     clkout3b => open,
     clkout4 => open,
     clkout5 => open,
@@ -511,60 +551,24 @@ begin
     o => clk10mhz
   );
 
-  master_pll_imp : plle2_base
-  generic map (
-    bandwidth => "HIGH",
-    clkin1_period => 25.000,
-    clkfbout_mult => 40,
-    clkout0_divide => 40,
-    clkout1_divide => 20,
-    clkout2_divide => 40,
-    clkout2_phase => 90.0
-  )
+  clk80mhz_bufg : bufg
   port map (
-    clkin1 => fpclkb,
-    clkfbin => master_fb_bufg,
-    rst => master_pll_reset,
-    pwrdwn => '0',
-    clkfbout => master_fb,
-    clkout0 => master_clkout0,
-    clkout1 => master_clkout1,
-    clkout2 => master_clkout2,
-    clkout3 => open,
-    clkout4 => open,
-    clkout5 => open,
-    locked => master_pll_locked
+    i => clk80mhz_out,
+    o => clk80mhz
   );
 
-  master_sysclk90_bufg_imp : bufg
+  clk40mhz_bufg : bufg
   port map (
-    i => master_clkout2,
-    o => master_sysclk90
+    i => clk40mhz_out,
+    o => clk40mhz
   );
 
-  master_sysclk_bufg_imp : bufg
+  clk40mhz_90_bufg : bufg
   port map (
-    i => master_clkout1,
-    o => master_sysclk
+    i => clk40mhz_90_out,
+    o => clk40mhz_90
   );
 
-  master_bcoclk_bufg_imp : bufg
-  port map (
-    i => master_clkout0,
-    o => master_bcoclk
-  );
-
-  master_fb_bufg_imp : bufg
-  port map (
-    i => master_fb,
-    o => master_fb_bufg
-  );
-
---
---  clkout0 = 40 MHz
---  clkout1 = 80 MHz
---  clkout2 = 160 MHz
---
   slave_pll_imp : plle2_adv
   generic map (
     bandwidth => "HIGH",
@@ -575,10 +579,10 @@ begin
     clkout1_divide => 20,
     clkout2_divide => 10,
     clkout3_divide => 40,
-    clkout3_phase => 60.0
+    clkout3_phase => 90.0
   )
   port map (
-    clkin2 => master_bcoclk,
+    clkin2 => fpclkb,
     clkin1 => fpclka,
     clkinsel => sysclk_sel,   -- low selects clkin2
     clkfbin => slave_fb_bufg,
@@ -633,8 +637,10 @@ begin
 
   tclkb_imp : tclkb_driver
   port map (
-    sysclk => master_sysclk,
-    bcoclk => master_sysclk90,
+    sysclk => clk80mhz,
+    bcoclk => clk40mhz,
+    bcoclk_90 => clk40mhz_90,
+    idle_pattern => tclk_idle,
     d => tclkb_cmd,
     dv => tclkb_dv,
     d16 => tclk_data(15 downto 0),
@@ -780,9 +786,9 @@ begin
             amc502_csr <= iobus.io_write_data;
             enable_bco_count <= '1';    -- Request to enable bco counter
           when address_i2c_l1 =>
-            i2c_address <= iobus.io_write_data(7 downto 1);
-            i2c_rw <= iobus.io_write_data(0);
-            i2c_len <= iobus.io_write_data(15 downto 8);
+            i2c_address <= iobus.io_write_data(7 downto 0);
+            i2c_nwrite <= iobus.io_write_data(15 downto 8);
+            i2c_nread <= iobus.io_write_data(23 downto 16);
             i2c_strobe <= i2c_ready_r;
           when address_tclk_data =>
             if ( tclk_data_busy = '0' ) then
@@ -792,12 +798,25 @@ begin
               do_idelay <= iobus.io_write_data(31);
             end if;
             tclk_data <= iobus.io_write_data;
-         when address_latch =>
-            latch_control <= iobus.io_write_data;
-            do_latch <= iobus.io_write_data(31);
+          when address_tclka_count_lo =>
+            if ( iobus.io_write_data = x"00000000" ) then
+              tclka_counter_reset <= '1';
+            end if;
+          when address_tclka_count_hi =>
+            if ( iobus.io_write_data = x"00000000" ) then
+              tclka_counter_reset <= '1';
+            end if;
+          when address_slave_pll =>
+            slave_pll_daddr <= iobus.io_write_data(22 downto 16);
+            slave_pll_di <= iobus.io_write_data(15 downto 0);
+            slave_pll_dwe <= iobus.io_write_data(31);
+            slave_pll_den <= '1';
           when address_clock_time =>
              clock_load_time <= iobus.io_write_data;
              clock_load_now <= '1';
+          when address_latch =>
+            latch_control <= iobus.io_write_data;
+            do_latch <= iobus.io_write_data(31);
           when address_bco_counter_hi =>
             write_bco_counter(47 downto 32) <= iobus.io_write_data(15 downto 0);
             do_bco_load <= '1';
@@ -821,11 +840,17 @@ begin
                             amc502_csr(21 downto 18) & bco_count_reset &
                             bco_count_enabled & amc502_csr(15 downto 0);
           when address_i2c_l1 =>
-            latched_data <= i2c_busy & i2c_nack & "000000" & i2c_nbyte & i2c_len & i2c_address & i2c_rw;
+            latched_data <= i2c_busy & i2c_nack & "000000" & i2c_nbyte & i2c_nwrite & i2c_address;
+          when address_i2c_addr_lllx =>
+            latched_data <= i2c_addr_lllx;
+          when address_i2c_data_lllx =>
+            latched_data <= i2c_data_lllx;
           when address_tclk_data =>
-            latched_data <= idelay_busy & timer_expired & idelay_tap & tclk_data(23 downto 0);
+            latched_data <= idelay_busy & timer_expired & idelay_tap & tclk_data(23 downto 20) & tclk_idle & tclk_data(15 downto 0);
           when address_latch =>
             latched_data <= latch_busy & latch_control(30 downto 0);
+          when address_mmcm =>
+            latched_data <= mmcm_drdy & mmcm_data_word(30 downto 16) & mmcm_data;
           when address_clock_time =>
             latched_data <= std_logic_vector(clock_time);
           when address_bco_counter_lo =>
@@ -886,34 +911,18 @@ begin
                           iobus.io_address(15 downto 8) = address_i2c_wbuf(15 downto 8)
                      else '0';
   i2c_wbuf_data <= i2c_wbuf(to_integer(unsigned(iobus.io_address(7 downto 2))));
-
-  process ( busclk )
-    variable i : integer range 0 to 63;
-    variable j : integer range 0 to 3;
-  begin
-    if ( busclk'event and busclk = '1' ) then
-      i2c_wen_r <= i2c_wen;
-      i2c_dout_r <= i2c_dout;
-      i2c_addr_r <= i2c_addr;
-      if ( i2c_wen_r = '1' ) then
-        i := i2c_addr_r/4;
-        j := i2c_addr_r mod 4;
-        i2c_rbuf(i)(8*j+7 downto 8*j) <= i2c_dout_r;
-        i2c_wbuf_din <= i2c_wbuf(i)(8*j+7 downto 8*j);
-      end if;
-    end if;
-  end process;
   i2c_rbuf_data <= i2c_rbuf(to_integer(unsigned(iobus.io_address(7 downto 2))));
-
   i2c_buf_data <= i2c_rbuf_data when iobus.io_address(15 downto 8) = address_i2c_rbuf(15 downto 8) else
                   i2c_wbuf_data when iobus.io_address(15 downto 8) = address_i2c_wbuf(15 downto 8) else
                   ( others => '0' );
 
   process ( clk20mhz )
+    variable i2c_buffer_addr : integer range 0 to 255;
     variable i : integer range 0 to 63;
     variable j : integer range 0 to 3;
   begin
     if ( clk20mhz'event and clk20mhz = '1' ) then
+
       i2c_strobe_r <= i2c_strobe;
       if ( flash_count = to_unsigned(10000000,31) ) then
         flash_count <= ( others => '0' );
@@ -921,22 +930,19 @@ begin
       else
         flash_count <= flash_count + 1;
       end if;
-      if ( i2c_strobe_r = '1' and i2c_ready = '1' ) then
-        i2c_addr <= 0;
-        i2c_next_addr <= '0';
-      elsif ( i2c_next_addr = '1' ) then
-        i2c_addr <= i2c_addr + 1;
-        i2c_next_addr <= '0';
-      end if;
+
+      i2c_buffer_addr := to_integer(unsigned(i2c_daddr));
+      i := i2c_buffer_addr/4;
+      j := i2c_buffer_addr mod 4;
+
       if ( i2c_den = '1' ) then
-        i := i2c_addr/4;
-        j := i2c_addr mod 4;
-        i2c_din <= i2c_wbuf_din;
-        i2c_next_addr <= '1';
+        i2c_din <= i2c_wbuf(i)(8*j+7 downto 8*j);
       end if;
+
       if ( i2c_wen = '1' ) then
-        i2c_next_addr <= '1';
+        i2c_rbuf(i)(8*j+7 downto 8*j) <= i2c_dout;
       end if;
+
     end if;
   end process;
 
@@ -967,8 +973,8 @@ begin
 
   i2c_busy <= i2c_strobe or not i2c_ready_r;
 
-  fpclk_internal(0) <= master_bcoclk;
-  fpclk_internal(1) <= master_sysclk;
+  fpclk_internal(0) <= clk40mhz;
+  fpclk_internal(1) <= clk80mhz;
   fpclk_internal(2) <= slave_bcoclk;
   fpclk_internal(3) <= slave_sysclk;
   fpclk_internal(4) <= fpclkb;

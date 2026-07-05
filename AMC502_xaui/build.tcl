@@ -62,8 +62,7 @@ read_vhdl -library hep337dev -verbose { \
   ../Sources/xaui.vhd \
   ../Sources/xaui_interface.vhd \
   ../Sources/xaui_xgmii.vhd \
-  ../Sources/crc32x64rom.vhd \
-  ../Sources/crc8x32_const.vhd \
+  ../Sources/crc32x64_slice.vhd \
   ../Sources/xaui_ethernet.vhd \
   ../Sources/xaui_arp.vhd \
   ../Sources/xaui_icmp.vhd \
@@ -96,16 +95,13 @@ report_utilization -file top_amc502_xaui_utilization.log -hierarchical -hierarch
 read_xdc ./constrs/pins_amc502.xdc
 read_xdc ./constrs/pins_xaui.xdc
 read_xdc ./constrs/timing_amc502_xaui.xdc
+add_files top_amc502_xaui_synth.dcp
 
 all_clocks -verbose
 report_clock_networks -file top_amc502_xaui_clocks.log
 report_clock_interaction -append -file top_amc502_xaui_clocks.log
 
-set_param route.enableBuildNodeGraphFromOfflinedFiles false
-
-add_files top_amc502_xaui_synth.dcp
 link_design -top top_amc502_xaui -part xc7k420tffg1156-2
-
 opt_design -debug_log
 report_clock_networks -file top_amc502_xaui_clocks.log
 report_clock_interaction -append -file top_amc502_xaui_clocks.log
@@ -114,8 +110,6 @@ place_design
 route_design
 report_route_status
 report_timing_summary -verbose -file top_amc502_xaui_timing.log
-
-show_objects -name route_conflicts [get_nets -hierarchical -filter { ROUTE_STATUS == "CONFLICTS" } ]
 
 write_checkpoint -force -noxdef top_amc502_xaui_impl.dcp
 

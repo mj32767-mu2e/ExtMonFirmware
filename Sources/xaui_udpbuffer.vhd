@@ -42,7 +42,7 @@ entity xaui_udpbuffer is
 end xaui_udpbuffer;
 
 architecture RTL of xaui_udpbuffer is
-  type ram_type is array(511 downto 0) of std_logic_vector(31 downto 0);
+  type ram_type is array(255 downto 0) of std_logic_vector(63 downto 0);
   signal ram : ram_type;
   signal write_address : integer range 0 to 255 := 0;
   signal source_ip_addr : std_logic_vector(31 downto 0);
@@ -75,9 +75,8 @@ begin
 --  write_address counts 32-bit words
 --
         word := write_address;
-        ram(word) <= rxd(31 downto 0);
-        ram(word+1) <= rxd(63 downto 32);
-        write_address <= write_address + 2;
+        ram(word) <= rxd;
+        write_address <= write_address + 1;
       end if;
     end if;
   end process;
@@ -95,7 +94,11 @@ begin
           when "111111111" =>
             doutb <= udp_length & std_logic_vector(to_unsigned(write_address,16));      -- x"7ffc"
           when others =>
-            doutb <= ram(to_integer(unsigned(addrb)));
+            if ( addrb(0) = '0' ) then
+              doutb <= ram(to_integer(unsigned(addrb(8 downto 1))))(31 downto 0);
+            else
+              doutb <= ram(to_integer(unsigned(addrb(8 downto 1))))(63 downto 32);
+            end if;
         end case;
       end if;
     end if;

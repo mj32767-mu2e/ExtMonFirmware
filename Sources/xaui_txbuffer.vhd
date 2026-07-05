@@ -57,6 +57,7 @@ architecture RTL of xaui_txbuffer is
   signal dram : dram_type := ( others => ( others => '0' ) );
   attribute syn_ramstyle : string;
   attribute syn_ramstyle of dram : signal is "no_rw_check";
+  signal addra_r : std_logic_vector(8 downto 0);
 
 begin
 
@@ -67,6 +68,7 @@ begin
   begin
 
     if ( clka'event and clka = '1' ) then
+      addra_r <= addra;
       if ( reset = '1' ) then
         sum <= ( others => '0' );
       elsif ( ena = '1' ) then
@@ -102,12 +104,11 @@ begin
         end if;
         sum <= std_logic_vector(new_sum(15 downto 0));
         dram(to_integer(unsigned(addra(addra'left downto 1)))) <= new_ram;
+      end if;
+      if ( addra_r(0) = '0' ) then
+        douta <= dram(to_integer(unsigned(addra_r(addra_r'left downto 1))))(31 downto 0);
       else
-        if ( addra(0) = '0' ) then
-          douta <= dram(to_integer(unsigned(addra(addra'left downto 1))))(31 downto 0);
-        else
-          douta <= dram(to_integer(unsigned(addra(addra'left downto 1))))(63 downto 32);
-        end if;
+        douta <= dram(to_integer(unsigned(addra_r(addra_r'left downto 1))))(63 downto 32);
       end if;
     end if;
   end process;

@@ -155,6 +155,7 @@ architecture behavioral of top_amc502_xaui is
   port (
     dclk : in std_logic;
     reset : in std_logic;
+    ready : out std_logic;
     clk156_in_p : in std_logic;
     clk156_in_n : in std_logic;
     xgmii_clk_lock : out std_logic;
@@ -224,6 +225,7 @@ architecture behavioral of top_amc502_xaui is
   signal gbe_stream_free : stream_free_array_t(1 downto 0);
 
   signal xaui_reset : std_logic := '0';
+  signal xaui_ready : std_logic := '0';
   signal xgmii_clk_lock : std_logic;
   signal xgmii_rxclk : std_logic;
   signal xgmii_txclk : std_logic;
@@ -248,13 +250,13 @@ architecture behavioral of top_amc502_xaui is
 
   signal command_strobes : std_logic_vector(15 downto 0);
   signal amc502_clocks : std_logic_vector(15 downto 0);
-  signal amc502_fpclka : std_logic;  -- slave 40 MHz input
-  signal amc502_fpclkb : std_logic;  -- master 40 MHz input
+  signal amc502_fpclka : std_logic;  -- master 40 MHz input from PLLA
+  signal amc502_fpclkb : std_logic;  -- slave 40 MHz input from PLLB
   signal amc502_fpclkc : std_logic;  -- extra PLL input
   signal amc502_fpclkd : std_logic;  -- extra PLL input
   signal amc502_fpclke : std_logic;  -- 10 MHz primary time source output
   signal amc502_fpclkf : std_logic;  -- tclka input
-  signal amc502_fpclkg : std_logic;  -- unused
+  signal amc502_fpclkg : std_logic;  -- unused 40 MHz input
   signal amc502_fpclkh : std_logic;  -- tclkb output
   signal tdaq_sysclk : std_logic;
   signal flag_event_marker : std_logic;
@@ -270,18 +272,12 @@ architecture behavioral of top_amc502_xaui is
   signal fpclkg : std_logic;
   signal clkfb : std_logic;
   signal clk200mhz_out : std_logic;
-  signal clk80mhz_out : std_logic;
-  signal clk160mhz_out : std_logic;
-  signal clk40mhz_out : std_logic;
   signal clk20mhz_out : std_logic;
   signal clk10mhz_out : std_logic;
   signal mmcm_locked : std_logic;
   signal idelay_rst : std_logic;
   signal idelay_rst_pipe : std_logic_vector(63 downto 0) := ( others => '0' );
   signal clk200mhz : std_logic;
-  signal clk160mhz : std_logic;
-  signal clk80mhz : std_logic;
-  signal clk40mhz : std_logic;
   signal clk20mhz : std_logic;
 
   constant nslave : integer := 3;
@@ -301,9 +297,20 @@ architecture behavioral of top_amc502_xaui is
   signal state : state_t := state1;
 
   attribute mark_debug : string;
+  attribute dont_touch : string;
   attribute mark_debug of xgmii_rxclk : signal is "true";
   attribute mark_debug of xgmii_rxd : signal is "true";
   attribute mark_debug of xgmii_rxc : signal is "true";
+  attribute mark_debug of clk20mhz : signal is "true";
+  attribute dont_touch of clk20mhz : signal is "true";
+  attribute mark_debug of scl_l1 : signal is "true";
+  attribute dont_touch of scl_l1 : signal is "true";
+  attribute mark_debug of sda_l1_in : signal is "true";
+  attribute dont_touch of sda_l1_in : signal is "true";
+  attribute mark_debug of sda_l1_out : signal is "true";
+  attribute dont_touch of sda_l1_out : signal is "true";
+  attribute mark_debug of sda_l1_t : signal is "true";
+  attribute dont_touch of sda_l1_t : signal is "true";
 
 begin
 
@@ -361,6 +368,7 @@ begin
   port map (
     dclk => clk100mhz,
     reset => xaui_reset,
+    ready => xaui_ready,
     clk156_in_p => clk156_25mhz2_p,
     clk156_in_n => clk156_25mhz2_n,
     xgmii_rxclk => xgmii_rxclk,
@@ -416,11 +424,7 @@ begin
     clkfbout_mult_f => 8.000,
     clkin1_period => 10.000,
     clkout0_divide_f => 4.000,
-    clkout1_divide => 40,
-    clkout2_divide => 20,
-    clkout3_divide => 10,
-    clkout4_divide => 5,
-    clkout6_divide => 80
+    clkout1_divide => 40
   )
   port map (
     clkfbin => clkfb,
@@ -433,11 +437,11 @@ begin
     clkout0b => open,
     clkout1 => clk20mhz_out,
     clkout1b => open,
-    clkout2 => clk40mhz_out,
+    clkout2 => open,
     clkout2b => open,
-    clkout3 => clk80mhz_out,
+    clkout3 => open,
     clkout3b => open,
-    clkout4 => clk160mhz_out,
+    clkout4 => open,
     clkout5 => open,
     clkout6 => open,
     locked => mmcm_locked
@@ -460,7 +464,7 @@ begin
 
   amc502_imp : amc502_interface
   generic map (
-    nclock => 5
+    nclock => 7
   )
   port map (
     clk100mhz => clk100mhz,
@@ -486,8 +490,8 @@ begin
     flag_clk40mhz_marker => flag_clk40mhz_marker,
     event_marker => event_marker,
     bco => bco_counter,
-    fpclka => fpclka,              -- slave recovered 40 MHz bcoclk input
-    fpclkb => fpclkb,              -- master 40 MHz bcoclk input
+    fpclka => fpclka,              -- master 40 MHz input
+    fpclkb => fpclkb,              -- slave recovered 40 MHz input
     tclka => amc502_fpclkf,        -- slave trigger-encoded system clock input
     tclkb => amc502_fpclkh,        -- master trigger-encoded system clock output
     fpclk => amc502_clocks,
@@ -558,6 +562,7 @@ begin
     iobus_ready => slave_ready(2),
     interrupt => open,
     reset_out => xaui_reset,
+    ready_in => xaui_ready,
     xgmii_rxclk => xgmii_rxclk,
     xgmii_txclk => xgmii_txclk,
     xgmii_txd => xgmii_txd,
@@ -748,6 +753,16 @@ begin
     o => amc502_scl_l1
   );
 
+  amc502_pll_reset_obuf : obuf
+  generic map (
+    drive => 12,
+    slew => "slow"
+  )
+  port map (
+    i => pll_rst_n,
+    o => amc502_pll_rst_n
+  );
+
   amc502_i2c_sda_llx_iobuf : iobuf
   generic map (
     drive => 12,
@@ -815,6 +830,8 @@ begin
                      2 => xgmii_rxclk,
                      3 => fpclke,
                      4 => fpclkg,
+                     5 => fpclkc,
+                     6 => fpclkd,
                      others => '0' );
 
   nuled <= "1110" when state = state1 else
